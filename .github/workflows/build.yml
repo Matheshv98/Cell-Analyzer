@@ -1,0 +1,96 @@
+name: Build and Package App with PyInstaller
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build-binaries:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' 
+
+      - name: Install PyInstaller and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+      
+      - name: Build with PyInstaller
+        run: |
+          # Common flags for PyQt5, OpenCV, and custom resources
+          # Target file: cell_analysis_app.py
+          COMMON_FLAGS="--onefile --hidden-import=resources_rc --collect-all pyqt5 --name CellAnalyzer"
+          
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            # Windows: Set icon, collect cv2, and set AppUserModelID (matching your Python code)
+            pyinstaller cell_analysis_app.py $COMMON_FLAGS --noconsole --distpath build/windows --icon icon.ico --collect-all cv2 --uac-admin --add-data "icon.ico;."
+          elif [ "${{ matrix.os }}" == "macos-latest" ]; then
+            # macOS: --windowed is the standard GUI flag. Set icon and collect cv2.
+            pyinstaller cell_analysis_app.py $COMMON_FLAGS --windowed --distpath build/macos --icon icon.ico --collect-all cv2
+          elif [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            # Linux: Collect all dependencies (cv2).
+            pyinstaller cell_analysis_app.py $COMMON_FLAGS --distpath build/linux --collect-all cv2
+          fi
+        shell: bash
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CellAnalyzer-${{ matrix.os }}
+          path: build/*
+          retention-days: 7
+
+  create-release:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip Windows artifact
+        run: |
+          cd artifacts/CellAnalyzer-windows-latest
+          zip -r ../../CellAnalyzer-windows.zip .
+
+      - name: Zip macOS artifact
+        run: |
+          cd artifacts/CellAnalyzer-macos-latest
+          zip -r ../../CellAnalyzer-macos.zip .
+
+      - name: Zip Linux artifact
+        run: |
+          cd artifacts/CellAnalyzer-ubuntu-latest
+          zip -r ../../CellAnalyzer-linux.zip .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            CellAnalyzer-windows.zip
+            CellAnalyzer-macos.zip
+            CellAnalyzer-linux.zip
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}-${{ github.run_number }}
+          body: |
+            This is an automated release for the Interactive Cell Analyzer.
+            
+            This release includes standalone executables for Windows, macOS, and Linux.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
