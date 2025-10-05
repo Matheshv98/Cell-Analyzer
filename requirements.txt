@@ -1,14 +1,16 @@
-
+# Core dependencies for Cell Analyzer
 PyQt5==5.15.10
 opencv-python
 numpy==2.2.5
 
+# Dependencies for features like fitting/plotting (if you keep them)
 matplotlib==3.10.3
 pandas==2.2.3
 pyqtgraph==0.13.7
 scipy==1.15.3
 lmfit
-packaging)
-pyqt5-tools
 
-PyInstaller
+# Required build tools
+pyinstaller
+setuptools
+wheel
