@@ -10,7 +10,6 @@ on:
 
 jobs:
   build-windows:
-    # Run only on the latest Windows environment
     runs-on: windows-latest
     
     steps:
@@ -24,14 +23,12 @@ jobs:
 
       - name: Install PyInstaller and Dependencies
         run: |
-          # Use a stable command to install all required libraries
           python -m pip install --upgrade pip setuptools wheel
           pip install --force-reinstall pyinstaller -r requirements.txt
       
       - name: Build Windows Executable
         run: |
           # PyInstaller command targets cell_analysis_app.py
-          # --noconsole for GUI app, --icon for the .ico file
           pyinstaller cell_analysis_app.py --onefile --noconsole --distpath build/windows --name CellAnalyzer --icon icon.ico --collect-all pyqt5 --collect-all cv2 --hidden-import=resources_rc --uac-admin --add-data "icon.ico;."
         shell: bash
 
@@ -39,6 +36,38 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CellAnalyzer-Windows-EXE
-          # The path points to the single generated EXE inside the build folder
+          # Path to the actual executable
           path: build/windows/CellAnalyzer.exe
           retention-days: 7
+
+  # --- NEW JOB TO CREATE THE GITHUB RELEASE ---
+  create-release:
+    # This job runs only AFTER the build-windows job succeeds
+    needs: build-windows 
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Essential permission to create a release
+
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CellAnalyzer-Windows-EXE
+          path: release/
+
+      - name: Rename and Prepare File for Release
+        # Rename the downloaded artifact to a cleaner name for the release
+        run: mv release/CellAnalyzer.exe CellAnalyzer-Windows-x64.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Automatically provided secret
+        with:
+          files: CellAnalyzer-Windows-x64.exe
+          name: Release ${{ github.ref }} 
+          tag_name: v1.0.0-${{ github.run_number }} # Creates a unique tag, e.g., v1.0.0-15
+          body: |
+            Automated Windows executable release for the Interactive Cell Analyzer app.
+            
+            Find the standalone .exe file attached below.
