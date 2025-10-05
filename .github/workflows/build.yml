@@ -1,96 +1,44 @@
-name: Build and Package App with PyInstaller
+name: Build Windows Executable
 
 on:
   push:
     branches:
       - main
       - develop
+  # Allows manual triggering from the GitHub Actions tab
   workflow_dispatch:
 
 jobs:
-  build-binaries:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+  build-windows:
+    # Run only on the latest Windows environment
+    runs-on: windows-latest
+    
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11' 
 
-      - name: Install PyInstaller and dependencies
+      - name: Install PyInstaller and Dependencies
         run: |
-          # Use a single chained command for stability, forcing upgrade and installation.
+          # Use a stable command to install all required libraries
           python -m pip install --upgrade pip setuptools wheel
           pip install --force-reinstall pyinstaller -r requirements.txt
       
-      - name: Build with PyInstaller
+      - name: Build Windows Executable
         run: |
-          # Common flags for PyQt5, OpenCV, and custom resources
-          # Target file: cell_analysis_app.py
-          COMMON_FLAGS="--onefile --hidden-import=resources_rc --collect-all pyqt5 --name CellAnalyzer"
-          
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            # Windows: Set icon, collect cv2, and set AppUserModelID (matching your Python code)
-            pyinstaller cell_analysis_app.py $COMMON_FLAGS --noconsole --distpath build/windows --icon icon.ico --collect-all cv2 --uac-admin --add-data "icon.ico;."
-          elif [ "${{ matrix.os }}" == "macos-latest" ]; then
-            # macOS: --windowed is the standard GUI flag. Set icon and collect cv2.
-            pyinstaller cell_analysis_app.py $COMMON_FLAGS --windowed --distpath build/macos --icon icon.ico --collect-all cv2
-          elif [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-            # Linux: Collect all dependencies (cv2).
-            pyinstaller cell_analysis_app.py $COMMON_FLAGS --distpath build/linux --collect-all cv2
-          fi
+          # PyInstaller command targets cell_analysis_app.py
+          # --noconsole for GUI app, --icon for the .ico file
+          pyinstaller cell_analysis_app.py --onefile --noconsole --distpath build/windows --name CellAnalyzer --icon icon.ico --collect-all pyqt5 --collect-all cv2 --hidden-import=resources_rc --uac-admin --add-data "icon.ico;."
         shell: bash
 
-      - name: Upload build artifact
+      - name: Upload Windows Executable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CellAnalyzer-${{ matrix.os }}
-          path: build/*
+          name: CellAnalyzer-Windows-EXE
+          # The path points to the single generated EXE inside the build folder
+          path: build/windows/CellAnalyzer.exe
           retention-days: 7
-
-  create-release:
-    needs: build-binaries
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download all build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Zip Windows artifact
-        run: |
-          cd artifacts/CellAnalyzer-windows-latest
-          zip -r ../../CellAnalyzer-windows.zip .
-
-      - name: Zip macOS artifact
-        run: |
-          cd artifacts/CellAnalyzer-macos-latest
-          zip -r ../../CellAnalyzer-macos.zip .
-
-      - name: Zip Linux artifact
-        run: |
-          cd artifacts/CellAnalyzer-ubuntu-latest
-          zip -r ../../CellAnalyzer-linux.zip .
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            CellAnalyzer-windows.zip
-            CellAnalyzer-macos.zip
-            CellAnalyzer-linux.zip
-          name: Release ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}-${{ github.run_number }}
-          body: |
-            This is an automated release for the Interactive Cell Analyzer.
-            
-            This release includes standalone executables for Windows, macOS, and Linux.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
